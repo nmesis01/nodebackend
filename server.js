@@ -1,4 +1,4 @@
-// server.js (Daha Sağlam Başlatma Mantığı)
+// server.js (Şarkı sıralama hatası düzeltildi)
 
 // Önce dotenv'i import edip çalıştırıyoruz.
 import dotenv from 'dotenv';
@@ -9,7 +9,6 @@ import express from 'express';
 import cors from 'cors';
 
 // Sunucuyu başlatmak için bir async fonksiyon oluşturuyoruz.
-// Bu, veritabanı bağlantısını (sql) dinamik olarak import etmemizi sağlar.
 const startServer = async () => {
   try {
     // DİNAMİK IMPORT: Bu satır, dotenv.config() çalıştıktan SONRA
@@ -28,14 +27,50 @@ const startServer = async () => {
       res.send('Backend sunucusu çalışıyor!');
     });
 
-    // Tüm albümleri getiren endpoint
+    // --- YENİ ENDPOINT: Belirli bir albümü ve şarkılarını getir ---
+    // Bu endpoint, ileride frontend'i daha verimli hale getirmek isterseniz diye hazır.
+    app.get('/api/albums/:id', async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await sql`
+          SELECT
+            a.id, a.title, a.description, a.cover_url,
+            ar.name as artist,
+            (
+              SELECT json_agg(s ORDER BY s.id)
+              FROM songs s
+              WHERE s.album_id = a.id
+            ) as songs
+          FROM albums a
+          JOIN artists ar ON a.artist_id = ar.id
+          WHERE a.id = ${id}
+          GROUP BY a.id, ar.name
+        `;
+
+        if (result.length === 0) {
+          return res.status(404).json({ error: 'Albüm bulunamadı' });
+        }
+        
+        res.json(result[0]);
+
+      } catch (err) {
+        console.error(`Albüm ${id} çekilirken hata:`, err.message);
+        res.status(500).send("Sunucu Hatası");
+      }
+    });
+
+    // Tüm albümleri getiren endpoint (DÜZELTİLDİ)
     app.get('/api/albums', async (req, res) => {
       try {
         const allAlbums = await sql`
           SELECT
              a.id, a.title, a.description, a.cover_url,
              ar.name as artist,
-             (SELECT json_agg(s.*) FROM songs s WHERE s.album_id = a.id) as songs
+             (
+               SELECT json_agg(s ORDER BY s.id) 
+               FROM songs s 
+               WHERE s.album_id = a.id
+             ) as songs
            FROM albums a
            JOIN artists ar ON a.artist_id = ar.id
            GROUP BY a.id, ar.name
